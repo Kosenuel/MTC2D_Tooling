@@ -59,7 +59,7 @@ stages {
         def response
         retry(5) {
           sleep(time: 30, unit: 'SECONDS')
-          response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:5001", return Stdout: true).trim()
+          response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:5001", returnStdout: true).trim()
           echo "HTTP Status Code is: ${response}"
           if (response == "200") {
             echo "Application is up and running"
