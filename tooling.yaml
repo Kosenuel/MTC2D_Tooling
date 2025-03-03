@@ -15,7 +15,7 @@ services:
       - MYSQL_DBNAME=toolingdb
 
   db: 
-    image: 146682692a3a # Use the mysql image id from the docker images command output 
+    image: mysql:5.7 # Use the mysql image id from the docker images command output when testing locally
     restart: always
     environment:
       MYSQL_DATABASE: toolingdb
