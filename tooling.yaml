@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+  tooling_frontend:
+    build: .
+    ports:
+      - "5001:80"
+    volumes:
+      - tooling_frontend:/var/www/html
+    depends_on:
+      - db
+    environment:
+      - MYSQL_IP=db
+      - MYSQL_USER=toolinguser
+      - MYSQL_PASSWORD=devopsacts
+      - MYSQL_DBNAME=toolingdb
+
+  db: 
+    image: 146682692a3a # Use the mysql image id from the docker images command output 
+    restart: always
+    environment:
+      MYSQL_DATABASE: toolingdb
+      MYSQL_USER: toolinguser
+      MYSQL_PASSWORD: devopsacts
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - db:/var/lib/mysql
+volumes:
+  tooling_frontend:
+  db:
