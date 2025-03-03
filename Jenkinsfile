@@ -4,7 +4,7 @@ pipeline {
   environment {
       DOCKER_REGISTRY = "docker.io"
       DOCKER_IMAGE = "emmanuelokose/tooling-app"
-      COMPOSE_FILE = "tooling.yml"
+      COMPOSE_FILE = "tooling.yaml"
   }
 
   parameters {
