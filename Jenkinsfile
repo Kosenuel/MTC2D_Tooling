@@ -1,73 +1,119 @@
-pipeline {
-  agent {
-    kubernetes {
-      yaml '''
-        apiVersion: v1
-        kind: Pod
-        spec:
-          containers:
-          - name: maven
-            image: maven:alpine
-            command:
-            - cat
-            tty: true
-          - name: docker
-            image: docker:latest
-            command:
-            - cat
-            tty: true
-            volumeMounts:
-             - mountPath: /var/run/docker.sock
-               name: docker-sock
-          volumes:
-          - name: docker-sock
-            hostPath:
-              path: /var/run/docker.sock    
-        '''
+agent any 
+
+environment {
+    DOCKER_REGISTRY = "docker.io"
+    DOCKER_IMAGE = "emmanuelokose/tooling-app"
+    COMPOSE_FILE = "tooling.yml"
+}
+
+parameters {
+  string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'Branch name to build on')
+}
+
+stages {
+  stage ("Initial Cleanup") {
+    steps {
+      dir ("${WORKSPACE}") {
+        deleteDir()
+      }
     }
   }
-  stages {
-    stage('Clone') {
-      steps {
-        container('maven') {
-          git branch: 'main', changelog: false, poll: false, url: 'https://mohdsabir-cloudside@bitbucket.org/mohdsabir-cloudside/java-app.git'
-        }
-      }
-    }  
-    stage('Build-Jar-file') {
-      steps {
-        container('maven') {
-          sh 'mvn package'
-        }
+
+  stage ("Source Code Checkout") {
+    steps {
+      script {
+        // Dynamically determine the branch to checkout based on the parameter
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: "${params.BRANCH_NAME}"]],
+          userRemoteConfigs: [[url: "https://github.com/Kosenuel/MTC2D_Tooling.git"]]
+        ])
       }
     }
-    stage('Build-Docker-Image') {
-      steps {
-        container('docker') {
-          sh 'docker build -t steghubregistry/java-app:latest .'
-        }
-      }
-    }
-    stage('Login-Into-Docker') {
-      steps {
-        container('docker') {
-          sh 'docker login -u steghubregistry -p Phartion001ng'
-      }
-    }
-    }
-     stage('Push-Images-Docker-to-DockerHub') {
-      steps {
-        container('docker') {
-          sh 'docker push steghubregistry/java-app:latest'
-      }
-    }
-     }
   }
-    post {
-      always {
-        container('docker') {
-          sh 'docker logout'
-      }
+
+  stage ("Build Docker Image") {
+    steps {
+      script {
+        def branchName = params.BRANCH_NAME
+        env.TAG_NAME = branchName == 'main' ? 'latest' : "${branchName}-0.0.$P{env.BUILD_NUMBER}"
+
+        // Have docker compose build the Docker image using the Dynamic tag (based on the branch name)
+        sh "docker-compose -f ${COMPOSE_FILE} build"
       }
     }
+  }
+
+  stage ("Run Docker Compose (Startup Image for Integration Test)") {
+    steps {
+      script {
+        // Start the Docker container using the Docker Compose file
+        sh "docker-compose -f ${COMPOSE_FILE} up -d"
+      }
+    }
+  }
+
+  stage ("Testing the Application - Availability") {
+    steps {
+      script {
+        def response
+        retry(5) {
+          sleep(time: 30, unit: 'SECONDS')
+          response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:5001", return Stdout: true).trim()
+          echo "HTTP Status Code is: ${response}"
+          if (response == "200") {
+            echo "Application is up and running"
+          } else {
+            error "Application is not available. error code: ${response}"
+          }
+        }
+      }
+    }
+  }
+
+  stage ("Tag and Push Docker Image to Registry") {
+    steps {
+      script {
+        // Tag the Docker image with the Docker Registry and push it to the registry
+        withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+          sh """
+            echo "\$PASSWORD" | docker login -u "\$USERNAME" --password-stdin ${DOCKER_REGISTRY}
+            docker tag tooling-app-cont_main-frontend ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${env.TAG_NAE}
+            docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${env.TAG_NAME}
+            """
+        }
+      }
+    }
+  }
+
+  stage ("Stop the Docker Containers") {
+    steps {
+      script {
+        // Stop the Docker container using the Docker Compose file
+        sh "docker-compose -f ${COMPOSE_FILE} down"
+      }
+    }
+  }
+
+  stage ("Final Cleanup") {
+    steps {
+      script {
+        // Cleanup the workspace - Remove Docker images to save space
+        sh """
+        docker rmi ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${env.TAG_NAME} || true 
+        docker rmi tooling-app-cont_main-frontend || true
+        """
+      }
+    }
+  }
+}
+
+// Post Build Actions
+post {
+  always {
+    script {
+      // Logout from Docker
+      sh "docker logout"
+    }
+  }
 }
