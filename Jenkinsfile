@@ -79,7 +79,7 @@ pipeline {
           withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
             sh """
               echo "\$PASSWORD" | docker login -u "\$USERNAME" --password-stdin ${DOCKER_REGISTRY}
-              docker tag tooling-app-cont_main-frontend ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${env.TAG_NAE}
+              docker tag mtc2d_tooling_main-tooling_frontend ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${env.TAG_NAME}
               docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${env.TAG_NAME}
               """
           }
